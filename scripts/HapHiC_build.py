@@ -200,7 +200,7 @@ def parse_arguments():
 
     parser = argparse.ArgumentParser(prog='haphic build')
     parser.add_argument(
-            'fasta', help='draft genome in FASTA format. Use `corrected_asm.fa` generated in the clustering step when `--correct_nrounds` was set')
+            'assembly', help='draft genome in FASTA format. Use `corrected_asm.fa` generated in the clustering step when `--correct_nrounds` was set')
     parser.add_argument(
             'raw_fasta', default=None,
             help='raw (uncorrected) draft genome in FASTA format, used for generating the script for juicebox visualization and curation. '
@@ -251,18 +251,18 @@ def run(args, log_file=None):
     logger.info('Command: {}'.format(' '.join(sys.argv)))
 
     # a simple parameter check
-    if os.path.basename(args.fasta) == 'corrected_asm.fa' and not args.corrected_ctgs:
+    if os.path.basename(args.assembly) == 'corrected_asm.fa' and not args.corrected_ctgs:
         logger.warning('[Warning] The input FASTA file is "corrected_asm.fa". Did you forget to include the parameter `--corrected_ctgs`???')
-    if args.fasta != args.raw_fasta and not args.corrected_ctgs:
+    if args.assembly != args.raw_fasta and not args.corrected_ctgs:
         logger.error('`fasta` and `raw_fasta` are different, but the parameter `--corrected_ctgs` was not set')
         raise RuntimeError('`fasta` and `raw_fasta` are different, but the parameter `--corrected_ctgs` was not set')
-    if args.fasta == args.raw_fasta and args.corrected_ctgs:
+    if args.assembly == args.raw_fasta and args.corrected_ctgs:
         logger.error('The parameter `--corrected_ctgs` was set, but `fasta` and `raw_fasta` are the same')
         raise RuntimeError('The parameter `--corrected_ctgs` was set, but `fasta` and `raw_fasta` are the same')
 
     # Using default RE here is ok. Because in the building step,
     # we don't care about the restriction sites.
-    fa_dict = parse_fasta(args.fasta, keep_letter_case=args.keep_letter_case, logger=logger)
+    fa_dict = parse_fasta(args.assembly, keep_letter_case=args.keep_letter_case, logger=logger)
 
     tour_dict, output_ctgs = parse_tours(args.tours, fa_dict)
 

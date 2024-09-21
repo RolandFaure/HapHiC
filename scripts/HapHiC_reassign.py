@@ -642,7 +642,7 @@ def parse_arguments():
     # Parameters for parsing input files and pipeline control
     input_group = parser.add_argument_group('>>> Parameters for parsing input files and pipeline control')
     input_group.add_argument(
-            'fasta', help='draft genome in FASTA format. Use `corrected_asm.fa` generated in the clustering step when `--correct_nrounds` was set')
+            'assembly', help='draft genome in FASTA format. Use `corrected_asm.fa` generated in the clustering step when `--correct_nrounds` was set')
     input_group.add_argument(
             'links', help='`full_links.pkl` generated in the clustering step (much faster) or filtered Hi-C read alignments in BAM/pairs format (DO NOT sort it by coordinate)')
     input_group.add_argument(
@@ -773,7 +773,7 @@ def run(args, log_file=None):
 
     # read draft genome in FASTA format,
     # construct a dict to store sequence and length of each contig / scaffold
-    fa_dict = parse_fasta(args.fasta, RE=args.RE, logger=logger)
+    fa_dict = parse_fasta(args.assembly, RE=args.RE, logger=logger)
 
     # quick view mode
     if args.quick_view:

@@ -44,6 +44,8 @@ HELP_DOC = """
              or to parallelize the "sort" step on a computer cluster, you may
              run the commands below individually:
 
+  graphunzip [Step0] Untangle the assembly graph using GraphUnzip.
+
   cluster    [Step1] Execute preprocessing and Markov clustering for contigs.
   reassign   [Step2] Reassign and rescue contigs. Perform additional agglomerative
                      hierarchical clustering if necessary.
@@ -83,6 +85,7 @@ JUICE_DOC = """
 
 # a dict mapping commands to corresponding programs
 param_dict = {
+        'graphunzip': 'GraphUnzip/graphunzip.py',
         'cluster': 'HapHiC_cluster.py',
         'reassign': 'HapHiC_reassign.py',
         'sort': 'HapHiC_sort.py',

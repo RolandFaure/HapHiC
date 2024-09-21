@@ -1266,7 +1266,7 @@ def correct_assembly(ctg_cov_dict, ctg_link_pos_dict, fa_dict, read_depth_dict, 
                             f.write('S\t{}\t*\tLN:i:{}\trd:i:{}\n'.format(ctg, fa_dict[ctg][1], read_depth))
     else:
         logger.info('No corrected contigs were found. Simply create a symbolic link of the input assembly')
-        os.symlink(args.fasta, corrected_assembly_file)
+        os.symlink(args.assembly, corrected_assembly_file)
         # generate an empty corrected_ctgs.txt
         with open(corrected_ctgs_file, 'w') as f:
             pass
@@ -1664,6 +1664,9 @@ def parse_alignments(alignments, fa_dict, args, bin_size, frag_len_dict, Nx_frag
     clm_dict = defaultdict(lambda: array('i'))
 
     for ref, mref, pos, mpos in alignments:
+
+        #print the line
+        print(ref, mref, pos, mpos)
 
         # skip intra-bin Hi-C links
         if ref == mref and ref not in split_ctg_set:
@@ -2504,7 +2507,7 @@ def parse_arguments():
     # Parameters for parsing input files and pipeline control
     input_group = parser.add_argument_group('>>> Parameters for parsing input files and pipeline control')
     input_group.add_argument(
-            'fasta', help='draft genome in FASTA format')
+            'assembly', help='draft genome in FASTA format')
     input_group.add_argument(
             'alignments', help='filtered Hi-C read alignments in BAM/pairs format (DO NOT sort it by coordinate)')
     input_group.add_argument(
@@ -2754,7 +2757,7 @@ def run(args, log_file=None):
 
     # read draft genome in FASTA format,
     # construct a dict to store sequence and length of each contig
-    fa_dict = parse_fasta(args.fasta, RE=args.RE)
+    fa_dict = parse_fasta(args.assembly, RE=args.RE)
 
     # parse gfa file(s) to get the read depth and phasing information
     if args.gfa:

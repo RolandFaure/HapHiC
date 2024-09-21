@@ -40,13 +40,11 @@ def parse_argument():
     # Parameters for parsing input files
     input_group = parser.add_argument_group('>>> Parameters for parsing input files')
     input_group.add_argument(
-            'fasta', help='draft genome in FASTA format')
+            'assembly', help='draft genome in FASTA/GFA format')
     input_group.add_argument(
-            'alignments', help='filtered Hi-C read alignments in BAM/pairs format (DO NOT sort it by coordinate)')
+            'alignments', help='filtered Hi-C read alignments in BAM format (DO NOT sort it by coordinate)')
     input_group.add_argument(
             'nchrs', type=int, help='expected number of chromosomes')
-    input_group.add_argument(
-            '--aln_format', choices={'bam', 'pairs', 'bgzipped_pairs', 'auto'}, default='auto', help='file format for Hi-C read alignments, default: %(default)s')
     input_group.add_argument(
             '--gfa', default=None,
             help='(experimental) matched GFA file(s) of the phased hifiasm assembly, separated with commas (e.g., `--gfa "gfa1,gfa2"`), default: %(default)s. '
@@ -67,8 +65,8 @@ def parse_argument():
             'in the Hi-C library construction, such as with the Arima genomics kit, separate the RE sites with commas (e.g., `--RE "GATC,GANTC"` for Arima '
             'two-enzyme chemistry and `--RE "GATC,GANTC,CTNAG,TTAA"` for Arima four-enzyme chemistry)')
     pipe_group.add_argument(
-            '--steps', default='1,2,3,4',
-            help='run specified HapHiC pipeline steps, separated with commas, default: %(default)s. `steps` should be continuous and start with "1" (e.g., '
+            '--steps', default='0,1,2,3,4',
+            help='run specified HapHiC pipeline steps, separated with commas, default: %(default)s. `steps` should be continuous and start with "0" or "1" (e.g., '
             '--steps "1,2,3"). (1: cluster, 2: reassign, 3: sort, 4: build)')
     pipe_group.add_argument(
             '--quick_view', default=False, action='store_true',
@@ -81,6 +79,16 @@ def parse_argument():
     pipe_group.add_argument(
             '--outdir', default=None,
             help='output directory, default: %(default)s (current directory)')
+    
+    # Parameters for GraphUnzip
+    graphunzip_group = parser.add_argument_group('>>> Parameters for GraphUnzip')
+    graphunzip_group.add_argument(
+        '--conservative', default=False, action='store_true', 
+        help='output very robust contigs. Use this option if the coverage information of the graph is not reliable, default: %(default)s')
+    graphunzip_group.add_argument('--noisy', default=False, action='store_true', 
+        help='use this option if you expect that the assembly may contain artefactual contigs, e.g. when you use the .p_utg.gfa of hifiasm, default: %(default)s')
+    graphunzip_group.add_argument('--genome_size', type=int, default=0,
+        help='genome size, default: %(default)s (optional but recommended)')
 
     # Parameters for assembly correction
     correct_group = parser.add_argument_group('>>> Parameters for assembly correction')
@@ -342,6 +350,44 @@ def parse_argument():
 
     return args
 
+def graphunzip(args):
+        logger.info('Step0: Run GraphUnzip to improve the contiguity of the assembly...')
+        
+        DIR = '00.graphunzip'
+        LOG_FILE = 'GraphUnzip.log'
+        try:
+                os.mkdir(DIR)
+        except FileExistsError:
+                pass
+        os.chdir(DIR)
+        
+        #first call HiC-IM to generate the interaction matrix
+        interactionFile = abspath('interactions.matrix')
+        commands = [pathjoin(os.path.dirname(os.path.realpath(__file__)), 'GraphUnzip/graphunzip.py')]
+        commands.extend(["HiC-IM", "-g", args.assembly, "-b", args.alignments, "-i", interactionFile])
+        print("Running command ", " ".join(commands))
+        subprocess.run(commands, check=True)
+
+        #then call unzip to actually untangle the assembly
+        outputGFA = abspath('unzipped.gfa')
+        outputFasta = abspath('unzipped.fa')
+        commands = [pathjoin(os.path.dirname(os.path.realpath(__file__)), 'GraphUnzip/graphunzip.py')]
+        commands.extend(["unzip", "-g", args.assembly, "-i", interactionFile, "-o", outputGFA, "-f", outputFasta, "-b", args.alignments, "--genomeSize", str(args.genome_size)])
+        print("Running command ", " ".join(commands))
+        subprocess.run(commands, check=True)
+        
+        if args.conservative:
+                commands.append('--conservative')
+        if args.noisy:
+                commands.append('--noisy')
+        
+        subprocess.run(commands, check=True)
+        
+        # modify args for the next step
+        args.assembly = abspath('corrected_asm.fa')
+        os.chdir('..')
+        
+        return None
 
 def haphic_cluster(args):
 
@@ -349,7 +395,14 @@ def haphic_cluster(args):
 
     DIR = '01.cluster'
     LOG_FILE = 'HapHiC_cluster.log'
-    os.mkdir(DIR)
+    try:
+        os.mkdir(DIR)
+    except FileExistsError:
+        #delete all files in the directory
+        files = glob.glob(DIR + '/*')
+        for f in files:
+                command = "rm -r " + f
+                os.system(command)
     os.chdir(DIR)
 
     HapHiC_cluster.run(args, log_file=LOG_FILE)
@@ -357,7 +410,7 @@ def haphic_cluster(args):
     # modify args for the next step
     # use the corrected assembly instead the original one
     if args.correct_nrounds:
-        args.fasta = abspath('corrected_asm.fa')
+        args.assembly = abspath('corrected_asm.fa')
         args.corrected_ctgs = abspath('corrected_ctgs.txt')
         if args.quick_view and args.gfa and len(args.gfa.split(',')) >= 2:
             args.gfa = ','.join([pathjoin(pathsplit(gfa)[0], DIR, 'corrected_' + pathsplit(gfa)[1]) for gfa in args.gfa.split(',')])
@@ -403,7 +456,15 @@ def haphic_reassign(args):
 
     DIR = '02.reassign'
     LOG_FILE = 'HapHiC_reassign.log'
-    os.mkdir(DIR)
+    try:
+        os.mkdir(DIR)
+    except FileExistsError:
+        #delete all files in the directory
+        files = glob.glob(DIR + '/*')
+        for f in files:
+                command = "rm -r " + f
+                os.system(command)
+
     os.chdir(DIR)
 
     HapHiC_reassign.run(args, log_file=LOG_FILE)
@@ -421,14 +482,21 @@ def haphic_sort(args):
 
     DIR = '03.sort'
     # LOG_FILE = 'HapHiC_sort.log'
-    os.mkdir(DIR)
+    try:
+        os.mkdir(DIR)
+    except FileExistsError:
+        #delete all files in the directory
+        files = glob.glob(DIR + '/*')
+        for f in files:
+                command = "rm -r " + f
+                os.system(command)
     os.chdir(DIR)
 
     # To improve memory usage of multiprocessing, the HapHiC_sort.py is called via subprocess
     # instead of import HapHiC_sort
     # HapHiC_sort.run(args, log_file=LOG_FILE)
     commands = [pathjoin(os.path.dirname(os.path.realpath(__file__)), 'HapHiC_sort.py')]
-    commands.extend([args.fasta, args.HT_links, args.clm_dir])
+    commands.extend([args.assembly, args.HT_links, args.clm_dir])
     commands.extend(args.groups)
 
     if args.quick_view:
@@ -466,7 +534,14 @@ def haphic_build(args):
 
     DIR = '04.build'
     LOG_FILE = 'HapHiC_build.log'
-    os.mkdir(DIR)
+    try:
+        os.mkdir(DIR)
+    except FileExistsError:
+        #delete all files in the directory
+        files = glob.glob(DIR + '/*')
+        for f in files:
+                command = "rm -r " + f
+                os.system(command)
     os.chdir(DIR)
 
     if args.alignments.endswith('.pairs') or args.alignments.endswith('.pairs.gz'):
@@ -481,6 +556,7 @@ def main():
 
     # parse arguments
     args = parse_argument()
+    args.aln_format = "bam"
 
     start_time = time.time()
     logger.info('Pipeline started, HapHiC version: {} (update: {})'.format(__version__, __update_time__))
@@ -489,12 +565,11 @@ def main():
 
     # check steps
     steps = {int(step) for step in args.steps.split(',')}
-    if steps not in ({1}, {1, 2}, {1, 2, 3}, {1, 2, 3, 4}):
+    if steps not in ({1}, {1, 2}, {1, 2, 3}, {1, 2, 3, 4}, {0}, {0, 1}, {0, 1, 2}, {0, 1, 2, 3}, {0, 1, 2, 3, 4}):
         raise Exception('Illegal steps: {}'.format(args.steps))
 
     # modify args to make them compatible across scripts
-    args.fasta = abspath(args.fasta)
-    args.raw_fasta = args.fasta
+    args.assembly = abspath(args.assembly)
     args.alignments = abspath(args.alignments)
     if args.ul:
         args.ul = abspath(args.ul)
@@ -508,6 +583,22 @@ def main():
         except FileExistsError:
             logger.warning('The directory {} already exists'.format(args.outdir))
         os.chdir(args.outdir)
+
+    # Step0: Run GraphUnzip to improve the contiguity of the assembly
+    if 0 in steps:
+        #check that the input assembly is in GFA format
+        if args.assembly.endswith('.gfa'):
+            graphunzip(args)
+            args.assembly = abspath('00.graphunzip/unzipped.fa')
+            args.alignments = args.alignments.strip(".bam") + ".new.bam"
+        else:
+            logger.warning('GraphUnzip only supports GFA format. Skipping step 0')
+
+    args.raw_fasta = args.assembly
+
+    #make sure the assembly is in fasta format
+    if not args.assembly.endswith('.fa') and not args.assembly.endswith('.fasta'):
+        raise Exception('The input assembly must be in FASTA format if graphunzip is not used')
 
     # Step1: Cluster contigs into groups
     haphic_cluster(args)
